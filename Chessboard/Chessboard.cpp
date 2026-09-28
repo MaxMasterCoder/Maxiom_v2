@@ -1,4 +1,59 @@
 #include "Chessboard.h"
+#include <cctype>
+
+void Board::setPositionFromFen(const std::string& fen) {
+    // Clear everything first
+    whitePawns = whiteKnights = whiteBishops = whiteRooks = whiteQueens = whiteKing = 0ULL;
+    blackPawns = blackKnights = blackBishops = blackRooks = blackQueens = blackKing = 0ULL;
+
+    std::istringstream ss(fen);
+    std::string placement, side = "w", castling = "-", enPassant = "-";
+    int halfmove = 0, fullmove = 1;
+    ss >> placement >> side >> castling >> enPassant >> halfmove >> fullmove;
+
+    int rank = 7, file = 0;
+    for (char c : placement) {
+        if (c == '/') {
+            rank--;
+            file = 0;
+        }
+        else if (std::isdigit(static_cast<unsigned char>(c))) {
+            file += c - '0';               // run of empty squares
+        }
+        else {
+            if (!inBounds(file, rank)) break;   // malformed FEN guard
+            int sq = squareIndex(file, rank);
+            switch (c) {
+            case 'P': setBit(whitePawns, sq);   break;
+            case 'N': setBit(whiteKnights, sq); break;
+            case 'B': setBit(whiteBishops, sq); break;
+            case 'R': setBit(whiteRooks, sq);   break;
+            case 'Q': setBit(whiteQueens, sq);  break;
+            case 'K': setBit(whiteKing, sq);    break;
+            case 'p': setBit(blackPawns, sq);   break;
+            case 'n': setBit(blackKnights, sq); break;
+            case 'b': setBit(blackBishops, sq); break;
+            case 'r': setBit(blackRooks, sq);   break;
+            case 'q': setBit(blackQueens, sq);  break;
+            case 'k': setBit(blackKing, sq);    break;
+            }
+            file++;
+        }
+    }
+
+    whiteToMove = (side == "w");
+
+    // Castling / en passant / clocks are parsed above but not stored yet.
+    // Once you add fields to Board, set them here, e.g.:
+    castleRights[WK] = castling.find('K') != std::string::npos;
+    castleRights[WQ] = castling.find('Q') != std::string::npos;
+    castleRights[BK] = castling.find('k') != std::string::npos;
+    castleRights[BQ] = castling.find('q') != std::string::npos;
+    epSquare = (enPassant == "-") ? -1 : squareIndex(enPassant[0] - 'a', enPassant[1] - '1');
+    halfMoveClock = halfmove;
+
+    updateOccupancies();
+}
 
 inline void Board::applyUciMove(const std::string& moveStr) {
     // moveStr like "e2e4", "e7e8q" (promotion)
@@ -17,6 +72,7 @@ inline void Board::applyUciMove(const std::string& moveStr) {
 
     updateOccupancies();
 }
+
 void Board::handlePositionCommand(std::istringstream& stream) {
     std::string token;
     stream >> token; // "startpos" or "fen"

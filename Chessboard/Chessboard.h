@@ -3,6 +3,10 @@
 #include <vector>
 #include <string>
 #include <sstream>
+#include <bit>
+#include <iostream>
+#include <array>
+
 
 #pragma region SQ
 enum class Square {
@@ -36,12 +40,12 @@ namespace BitOp {
 
     // Count how many bits are set (how many pieces)
     inline int popCount(uint64_t bb) {
-        return __builtin_popcountll(bb); // GCC/Clang intrinsic, very fast
+        return std::popcount(bb);
     }
 
     // Index of the least significant set bit (e.g. "first piece in this bitboard")
     inline int lsbIndex(uint64_t bb) {
-        return __builtin_ctzll(bb); // count trailing zeros
+        return std::countr_zero(bb);
     }
 
     // Pop (extract and clear) the LSB — the classic bitboard iteration pattern
@@ -54,7 +58,9 @@ namespace BitOp {
 #pragma endregion
 using namespace BitOp;
 
-
+enum rights {
+    WK,WQ,BK,BQ
+};
 struct Board {
     uint64_t whitePawns, whiteKnights, whiteBishops, whiteRooks, whiteQueens, whiteKing;
     uint64_t blackPawns, blackKnights, blackBishops, blackRooks, blackQueens, blackKing;
@@ -63,65 +69,93 @@ struct Board {
     uint64_t whiteOccupied, blackOccupied, allOccupied;
 
     bool whiteToMove;
+    bool castleRights[4];
+    int epSquare;
+    int halfMoveClock;
     // castling rights, en passant square, halfmove clock, etc. come later
 
 
 
 
-    inline void updateOccupancies();
+    inline void updateOccupancies() {
+        whiteOccupied = whitePawns | whiteKnights | whiteBishops |
+            whiteRooks | whiteQueens | whiteKing;
+        blackOccupied = blackPawns | blackKnights | blackBishops |
+            blackRooks | blackQueens | blackKing;
+        allOccupied = whiteOccupied | blackOccupied;
+    }
 
-    inline void setStartPosition();
+    inline void setStartPosition() {
+        whitePawns = 0x000000000000FF00ULL; // rank 2
+        whiteRooks = 0x0000000000000081ULL; // a1, h1
+        whiteKnights = 0x0000000000000042ULL; // b1, g1
+        whiteBishops = 0x0000000000000024ULL; // c1, f1
+        whiteQueens = 0x0000000000000008ULL; // d1
+        whiteKing = 0x0000000000000010ULL; // e1
 
-    void setPositionFromFen(const std::string& fen);
-    inline void applyUciMove(const std::string& moveStr) {
-        // moveStr like "e2e4", "e7e8q" (promotion)
-        int fromFile = moveStr[0] - 'a';
-        int fromRank = moveStr[1] - '1';
-        int toFile = moveStr[2] - 'a';
-        int toRank = moveStr[3] - '1';
-        int from = squareIndex(fromFile, fromRank);
-        int to = squareIndex(toFile, toRank);
-        char promo = (moveStr.size() > 4) ? moveStr[4] : '\0';
+        blackPawns = 0x00FF000000000000ULL; // rank 7
+        blackRooks = 0x8100000000000000ULL; // a8, h8
+        blackKnights = 0x4200000000000000ULL; // b8, g8
+        blackBishops = 0x2400000000000000ULL; // c8, f8
+        blackQueens = 0x0800000000000000ULL; // d8
+        blackKing = 0x1000000000000000ULL; // e8
 
-        // TODO: find which piece bitboard has `from` set, clear that bit,
-        // clear any enemy piece bit at `to` (capture), set the piece bit at `to`.
-        // Handle promo, castling, en passant as special cases.
-        // Flip whiteToMove.
-
+        whiteToMove = true;
         updateOccupancies();
     }
-    void handlePositionCommand(std::istringstream& stream) {
-        std::string token;
-        stream >> token; // "startpos" or "fen"
 
-        if (token == "startpos") {
-            setStartPosition();
-            stream >> token; // should be "moves" if present, or nothing
-        }
-        else if (token == "fen") {
-            std::string fen;
-            // FEN has 6 space-separated fields; collect them until we hit "moves" or run out
-            while (stream >> token && token != "moves") {
-                fen += token + " ";
-            }
-            setPositionFromFen(fen); // you'll write this — parse each FEN field
-        }
-
-        // At this point token is either "moves" or stream is exhausted
-        if (token == "moves") {
-            std::string moveStr;
-            while (stream >> moveStr) {
-                applyUciMove(moveStr);
-            }
-        }
-    }
+    void setPositionFromFen(const std::string& fen);
+    inline void applyUciMove(const std::string& moveStr);
+    void handlePositionCommand(std::istringstream& stream);
 };
 
+inline void beautyPrintBoard(const Board& board, int interpiece = 0) {
+    std::array<char, 64> boardConstruct;
+    boardConstruct.fill('-');
+
+    auto addPiece = [&](const uint64_t& piece, char character) {
+        uint64_t piece_copy = piece;
+        while (piece_copy) {
+            int sq = popLsb(piece_copy);
+            boardConstruct[sq] = character;
+        }
+        };
+
+    // --- White Pieces ---
+    addPiece(board.whitePawns, 'P');
+    addPiece(board.whiteKnights, 'N');
+    addPiece(board.whiteBishops, 'B');
+    addPiece(board.whiteRooks, 'R');
+    addPiece(board.whiteQueens, 'Q');
+    addPiece(board.whiteKing, 'K');
+
+    // --- Black Pieces ---
+    addPiece(board.blackPawns, 'p');
+    addPiece(board.blackKnights, 'n');
+    addPiece(board.blackBishops, 'b');
+    addPiece(board.blackRooks, 'r');
+    addPiece(board.blackQueens, 'q');
+    addPiece(board.blackKing, 'k');
+    
+    std::cout << std::string(8 + interpiece * 7, '-') << std::endl;
+    for (int r = 7; r >= 0; r--) {
+        for (int f = 0; f < 8; f++) {
+            int i = SQ::squareIndex(f, r);
+
+            std::cout << boardConstruct[i];
+            if (f < 7) {
+                std::cout << std::string(interpiece, ' ');
+            }
+        }
+        std::cout << std::endl;
+    }
+    std::cout << std::string(8 + interpiece * 7, '-') << std::endl;
+}
 
 
-uint64_t knightAttacks[64];
-uint64_t kingAttacks[64];
-void initKnightAttacks() {
+inline uint64_t knightAttacks[64];
+inline uint64_t kingAttacks[64];
+inline void initKnightAttacks() {
     for (int sq = 0; sq < 64; sq++) {
         uint64_t attacks = 0ULL;
         int f = fileOf(sq), r = rankOf(sq);
