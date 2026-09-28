@@ -68,36 +68,11 @@ struct Board {
 
 
 
-    inline void updateOccupancies() {
-        whiteOccupied = whitePawns | whiteKnights | whiteBishops |
-            whiteRooks | whiteQueens | whiteKing;
-        blackOccupied = blackPawns | blackKnights | blackBishops |
-            blackRooks | blackQueens | blackKing;
-        allOccupied = whiteOccupied | blackOccupied;
-    }
+    inline void updateOccupancies();
 
-    inline void setStartPosition() {
-        whitePawns = 0x000000000000FF00ULL; // rank 2
-        whiteRooks = 0x0000000000000081ULL; // a1, h1
-        whiteKnights = 0x0000000000000042ULL; // b1, g1
-        whiteBishops = 0x0000000000000024ULL; // c1, f1
-        whiteQueens = 0x0000000000000008ULL; // d1
-        whiteKing = 0x0000000000000010ULL; // e1
+    inline void setStartPosition();
 
-        blackPawns = 0x00FF000000000000ULL; // rank 7
-        blackRooks = 0x8100000000000000ULL; // a8, h8
-        blackKnights = 0x4200000000000000ULL; // b8, g8
-        blackBishops = 0x2400000000000000ULL; // c8, f8
-        blackQueens = 0x0800000000000000ULL; // d8
-        blackKing = 0x1000000000000000ULL; // e8
-
-        whiteToMove = true;
-        updateOccupancies();
-    }
-
-    void setPositionFromFen(const std::string& fen) {
-        return;
-    }
+    void setPositionFromFen(const std::string& fen);
     inline void applyUciMove(const std::string& moveStr) {
         // moveStr like "e2e4", "e7e8q" (promotion)
         int fromFile = moveStr[0] - 'a';
